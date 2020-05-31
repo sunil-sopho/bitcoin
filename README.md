@@ -1,4 +1,4 @@
 # bitcoin
 
 run code :
-python main.py
+python3 main.py
