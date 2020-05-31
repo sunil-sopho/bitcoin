@@ -8,7 +8,8 @@ from Crypto.Hash import SHA256
 
 class node(object):
 
-	def __init__(self, public_key, private_key):
+	def __init__(self, iden, public_key, private_key):
+		self.id = iden
 		self.public_key = public_key
 		self.__private_key = private_key
 		return
@@ -27,6 +28,9 @@ class Transaction(object):
 		self.fromAddress = fromAddress
 		self.toAddress = toAddress
 		self.amount = amount
+
+	def details(self):
+		return "Sender: " + str(self.fromAddress.id) + " Receiver: " + str(self.toAddress.id) + " Amount:  " + str(self.amount)
 
 	def calculateHash(self):
 		return hashlib.sha256((str(self.toAddress)+str(self.fromAddress)+str(self.amount)).encode('utf-8')).hexdigest()
@@ -58,7 +62,10 @@ class block(object):
 			print("All transactions are not valid in the block\n")
 
 	def __str__(self):
-		return "Transaction: "+str(self.transx)+" \ncurrentHash: "+str(self.currentHash)+" \n previousHash: "+str(self.previousHash) +" \n nonce: " + str(self.nonce)
+		transactions_details = []
+		for x in self.transx:
+			transactions_details.append(x.details())
+		return "Transaction: "+str(transactions_details)+" \ncurrentHash: "+str(self.currentHash)+" \n previousHash: "+str(self.previousHash) +" \n nonce: " + str(self.nonce)
 
 	def selfhash(self):
 		return hashlib.sha256((str(self.transx) + str(self.nonce) +str(self.timestamp) + str(self.previousHash)).encode('utf-8')).hexdigest()
@@ -124,9 +131,9 @@ class blockchain(object):
 if __name__ == '__main__':
 	bitcoin = blockchain()
 	public, private = bitcoin.newkeys(1024)
-	nodeA = node(public, private)
+	nodeA = node(1, public, private)
 	public, private = bitcoin.newkeys(1024)
-	nodeB = node(public, private)
+	nodeB = node(2, public, private)
 	trans = Transaction(nodeA, nodeB, 10)
 	trans.signTransaction()
 	block1 = block(time.time(), [trans], "")
