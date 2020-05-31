@@ -1,6 +1,26 @@
 import sys
 import hashlib 
 import time
+from Crypto.Signature import PKCS1_v1_5
+from Crypto.PublicKey import RSA
+from Crypto import Random
+from Crypto.Hash import SHA256
+
+class node(object):
+	def __init__(self, public_key, private_key):
+		self.public_key = public_key
+		self.__private_key = private_key
+		return
+
+	def sign(self, hash_message):
+		signer = PKCS1_v1_5.new(self.__private_key)
+		hash_message = bytes(str(hash_message))
+		# return signer.sign(hash_message)
+
+		signer = PKCS1_v1_5.new(self.__private_key)
+		digest = SHA256.new()
+		digest.update(hash_message)
+		return signer.sign(digest)
 
 
 class Transaction(object):
@@ -14,16 +34,19 @@ class Transaction(object):
 		return hashlib.sha256(str(self.toAddress)+str(self.fromAddress)+str(self.amount)).hexdigest()
 
 	def signTransaction(self):
-		# add signTransaction
-
+		transaction_hash = self.calculateHash()
+		self.signature = self.fromAddress.sign(transaction_hash)
 		return
 
 	def isValid(self):
 		if not self.signature:
-			print "Transaction don't have signature"
+			print("Transaction don't have signature\n")
 			return False
-
-		# verify signature
+		signer = PKCS1_v1_5.new(self.fromAddress.public_key)
+		hash_message = bytes(self.calculateHash())
+		digest = SHA256.new()
+		digest.update(hash_message)
+		return signer.verify(digest, self.signature)
 
 
 
@@ -34,16 +57,19 @@ class block(object):
 		self.timestamp = timestamp
 		self.transx = Transx
 		self.previousHash = previousHash
-		self.nounce = 0
+		self.nonce = 0
 
 		self.currentHash = self.selfhash()
 
+		if not self.transactionValid():
+			print("All transactions are not valid in the block\n")
+
 	def __str__(self):
-		return "Transaction: "+str(self.Transx)+" \ncurrentHash: "+str(self.currentHash)+" \n previousHash: "+str(self.previousHash) +" \n nounce: " + str(self.nounce)
+		return "Transaction: "+str(self.transx)+" \ncurrentHash: "+str(self.currentHash)+" \n previousHash: "+str(self.previousHash) +" \n nonce: " + str(self.nonce)
 
 	def selfhash(self):
 
-		return hashlib.sha256((str(self.Transx) + str(self.nounce) +str(self.timestamp) + str(self.previousHash) +str(self.data)).encode('utf-8')).hexdigest()
+		return hashlib.sha256((str(self.transx) + str(self.nonce) +str(self.timestamp) + str(self.previousHash)).encode('utf-8')).hexdigest()
 
 	def updateHash(self):
 		self.currentHash = self.selfhash()
@@ -51,7 +77,7 @@ class block(object):
 	def mineBlock(self,difficulty):
 
 		while self.currentHash[0:difficulty] != "0"*difficulty :
-			self.nounce += 1
+			self.nonce += 1
 			self.updateHash()
 
 	def transactionValid(self):
@@ -71,7 +97,7 @@ class blockchain(object):
 		self.pendingTransactions = []
 
 	def createGenesisBlock(self):
-		return block(0,time.time(),None,"")
+		return block(time.time(),[],None)
 
 	def getLastBlock(self):
 		return self.chain[-1]
@@ -106,11 +132,24 @@ class blockchain(object):
 		self.pendingTransactions.append(transx)
 
 
+	def newkeys(self, keysize):
+	   random_generator = Random.new().read
+	   key = RSA.generate(keysize, random_generator)
+	   private, public = key, key.publickey()
+	   return public, private
+
 if __name__ == '__main__':
 
 	# main function
 	bitcoin = blockchain()
-	block1 = block(1,time.time(),"block 1",)
+	public, private = bitcoin.newkeys(1024)
+	nodeA = node(public, private)
+	public, private = bitcoin.newkeys(1024)
+	nodeB = node(public, private)
+
+	trans = Transaction(nodeA, nodeB, 10)
+	trans.signTransaction()
+	block1 = block(time.time(), [trans], "")
 
 	bitcoin.addNewBlock(block1)
 	# print(bitcoin.chain)
