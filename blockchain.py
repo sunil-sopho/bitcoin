@@ -5,6 +5,7 @@ from Crypto.Signature import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Hash import SHA256
+import copy
 
 
 class merkeleTree(object):
@@ -40,10 +41,11 @@ class merkeleTree(object):
 
 class Transaction(object):
 
-	def __init__(self,fromAddress,toAddress,amount):
+	def __init__(self,fromAddress,toAddress,amount, creation_time=0):
 		self.fromAddress = fromAddress
 		self.toAddress = toAddress
 		self.amount = amount
+		self.creation_time = creation_time
 
 	def details(self):
 		return "Sender: " + str(self.fromAddress.id) + " Receiver: " + str(self.toAddress.id) + " Amount:  " + str(self.amount)
@@ -74,13 +76,14 @@ class block(object):
 		self.timestamp = timestamp
 		self.transx = Transx
 		self.previousHash = previousHash
-		self.merkeleTree = merkeleTree(Transx)
+		self.merkeleTree = merkeleTree(copy.copy(Transx))
 		self.merkeleRoot = self.merkeleTree.rootHash
 		if Transx:
 			assert self.merkeleRoot != None,"merkeleRoot can't be None"
 
 		self.nonce = 0
 		self.currentHash = self.selfhash()
+		self.nextBlocks = []
 		if not self.transactionValid():
 			print("All transactions are not valid in the block\n")
 
@@ -88,13 +91,19 @@ class block(object):
 		transactions_details = []
 		for x in self.transx:
 			transactions_details.append(x.details())
-		return "Transaction: "+str(transactions_details)+" \ncurrentHash: "+str(self.currentHash)+" \n previousHash: "+str(self.previousHash) +" \n nonce: " + str(self.nonce)
+		return "Transaction: "+str(transactions_details) +" \ncurrentHash: "+str(self.currentHash)+" \n previousHash: "+str(self.previousHash) +" \n nonce: " + str(self.nonce)
 
 	def selfhash(self):
 		return hashlib.sha256((str(self.merkeleRoot) + str(self.nonce) +str(self.timestamp) + str(self.previousHash)).encode('utf-8')).hexdigest()
 
 	def updateHash(self):
 		self.currentHash = self.selfhash()
+
+	def set_prev_hash(self, pre_hash):
+		self.previousHash = pre_hash
+
+	def get_prev_hash(self):
+		return self.previousHash
 
 	def mineBlock(self,difficulty):
 		while self.currentHash[0:difficulty] != "0"*difficulty :
@@ -111,24 +120,77 @@ class blockchain(object):
 
 	def __init__(self,difficulty=3):
 		self.chain = []
-		self.chain.append(self.createGenesisBlock())
+		genesisBlock = self.createGenesisBlock()
+		self.chain.append(genesisBlock)
+		self.chainRoot = genesisBlock
 		self.difficulty = difficulty
 		self.pendingTransactions = []
 
 	def createGenesisBlock(self):
 		return block(time.time(),[],None)
 
+	def getFarthestLeaf(self, leng, root):
+		if(root.nextBlocks == []):
+			return leng, root
+		else:
+			max_len = -1000000000
+			return_block = None
+			for i in range(len(root.nextBlocks)):
+				a,b = self.getFarthestLeaf(leng+1, root.nextBlocks[i])
+				if(a >= max_len):
+					max_len = a
+					return_block = b
+			return max_len, return_block
+
 	def getLastBlock(self):
-		return self.chain[-1]
+		a,b = self.getFarthestLeaf(0, self.chainRoot)
+		return b
+
+	def findBlock(self, hashp, root):
+		if(root.currentHash == hashp):
+			return True, root
+		else:
+			for i in range(len(root.nextBlocks)):
+				a,b = self.findBlock(hashp, root.nextBlocks[i])
+				return a,b
+			return False, None
 
 	def addNewBlock(self,newBlock):
-		newBlock.previousHash = self.getLastBlock().currentHash
-		newBlock.mineBlock(self.difficulty)
-		self.chain.append(newBlock)
+		previousHash = newBlock.get_prev_hash()
+		a, b = self.findBlock(previousHash, self.chainRoot)
+		if(a==True and newBlock not in b.nextBlocks):
+			b.nextBlocks.append(newBlock)
+
+	def current_hash(self):
+		return self.getLastBlock().currentHash
+
+	def printLongestPaths(self, leng, root):
+		if(root.nextBlocks == []):
+			return leng, [[root]]
+		else:
+			max_len = -1000000000
+			return_list = []
+			for i in range(len(root.nextBlocks)):
+				a,b = self.printLongestPaths(leng+1, root.nextBlocks[i])
+				if(a > max_len):
+					max_len = a
+					for j in range(len(b)):
+						b[j].insert(0, root)
+					return_list = b
+				elif(a==max_len):
+					for j in range(len(b)):
+						b[j].insert(0, root)
+						return_list.append(b[j])
+
+			return max_len, return_list
 
 	def printChain(self):
-		for x in self.chain:
-			print(x)
+		a, b = self.printLongestPaths(0,self.chainRoot)
+		for i in range(len(b)):
+			print("Chain: " + str(i))
+			for j in range(len(b[i])):
+				print(b[i][j])
+		print(len(self.chainRoot.nextBlocks))
 
 	def mineTransactions(self,by):
 		block = block(time.time(),self.pendingTransactions)
